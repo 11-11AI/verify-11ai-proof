@@ -39,6 +39,33 @@ JWKS_URL = f"{BASE}/.well-known/jwks.json"
 EVIDENCE_URL = f"{BASE}/v1/public/evidence"
 
 
+def key_bytes(s: str) -> bytes:
+    """Decode a key or signature as published.
+
+    The hybrid envelope publishes Ed25519 material base64url encoded and the
+    post-quantum material hex encoded. Decoding hex as base64url silently
+    yields the wrong bytes at the wrong length (a 2592 byte ML-DSA-87 key
+    reads as 3888), so detect rather than assume.
+    """
+    t = s.strip()
+    if re.fullmatch(r"[0-9a-fA-F]+", t) and len(t) % 2 == 0:
+        return bytes.fromhex(t)
+    return b64u(t)
+
+
+# liboqs parameter set names for the algorithms the envelope declares. Keyed on
+# the declared algorithm rather than hardcoded, so a profile change cannot leave
+# the verifier checking against a parameter set that is no longer deployed.
+OQS_NAMES = {
+    "ML-DSA-44": "ML-DSA-44",
+    "ML-DSA-65": "ML-DSA-65",
+    "ML-DSA-87": "ML-DSA-87",
+    "SLH-DSA-SHA2-128F": "SPHINCS+-SHA2-128f-simple",
+    "SLH-DSA-SHA2-128S": "SPHINCS+-SHA2-128s-simple",
+    "SLH-DSA-SHA2-256S": "SPHINCS+-SHA2-256s-simple",
+}
+
+
 def b64u(s: str) -> bytes:
     return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
 
@@ -56,7 +83,10 @@ def main() -> int:
     ap.add_argument("--jwks-file", help="use a saved JWKS JSON instead of fetching")
     args = ap.parse_args()
 
-    results = {"endpoint": args.evidence_file or EVIDENCE_URL, "checks": {}, "ok": False}
+    results = {"endpoint": args.evidence_file or EVIDENCE_URL, "checks": {}, "ok": False,
+        "skipped": [],
+        "verified": [],
+    }
     ok = True
 
     # 1. Trust anchor: public key from JWKS
@@ -128,32 +158,56 @@ def main() -> int:
             ok = False
             results["checks"]["ed25519"] = "FAIL: Ed25519 signature INVALID"
 
-    # 5. Best-effort post-quantum verification (requires liboqs bindings)
-    for name, alg in (("ml_dsa", "ML-DSA-65"), ("sphincs_plus", "SPHINCS+-SHA2-256s-simple")):
+    # 5. Post-quantum verification. Skipped unless liboqs bindings are present.
+    #    A skip is recorded as a skip and is never folded into the headline
+    #    result: the point of this tool is to check, not to relay the server's
+    #    own labels.
+    for name in ("ml_dsa", "sphincs_plus"):
         blk = (envelope.get(name) or {}).get("signature") or {}
         pq_sig, pq_pub = blk.get("signature"), blk.get("public_key")
+        declared = str(blk.get("algorithm") or "").strip()
         if not (pq_sig and pq_pub):
+            results["skipped"].append(name)
             results["checks"][name] = "SKIP: not present in envelope"
             continue
+
+        alg = OQS_NAMES.get(declared.upper())
+        if alg is None:
+            results["skipped"].append(name)
+            results["checks"][name] = (
+                f"SKIP: envelope declares {declared!r}, which this verifier "
+                "does not know how to check"
+            )
+            continue
+
         try:
             import oqs  # type: ignore
         except ImportError:
+            results["skipped"].append(name)
             results["checks"][name] = (
-                f"SKIP: envelope reports {blk.get('status')}; "
-                "install liboqs-python to verify locally"
+                f"SKIP: {declared} NOT CHECKED here. The envelope reports "
+                f"{blk.get('status')}, which is the server's own claim and is "
+                "not evidence. Install liboqs-python to verify it locally."
             )
             continue
+
         try:
             with oqs.Signature(alg) as v:
                 valid = v.verify(
-                    evidence_root.encode("ascii"), b64u(pq_sig), b64u(pq_pub)
+                    evidence_root.encode("ascii"),
+                    key_bytes(pq_sig),
+                    key_bytes(pq_pub),
                 )
             if valid:
-                results["checks"][name] = f"OK: {alg} verifies over ea11_evidence_root"
+                results["checks"][name] = (
+                    f"OK: {declared} verifies over ea11_evidence_root"
+                )
+                results["verified"].append(declared)
             else:
                 ok = False
-                results["checks"][name] = f"FAIL: {alg} signature INVALID"
-        except Exception as e:  # unknown parameter set, etc.
+                results["checks"][name] = f"FAIL: {declared} signature INVALID"
+        except Exception as e:  # unknown parameter set, bad encoding, etc.
+            results["skipped"].append(name)
             results["checks"][name] = f"SKIP: could not verify locally ({e})"
 
     results["ok"] = ok
@@ -168,7 +222,22 @@ def _emit(results: dict, args) -> None:
     print(f"\n  verify-11ai-proof — {results['endpoint']}\n")
     for name, outcome in results["checks"].items():
         print(f"  [{name}] {outcome}")
-    print(f"\n  RESULT: {'VERIFIED' if results['ok'] else 'FAILED'}\n")
+    if not results["ok"]:
+        print("\n  RESULT: FAILED\n")
+        return
+
+    checked = ["Ed25519"] + list(results.get("verified", []))
+    skipped = results.get("skipped", [])
+    if skipped:
+        # Never a bare VERIFIED while a signature went unchecked. The whole
+        # point of this tool is that it does the math rather than relaying the
+        # server's labels, so it must say which math it actually did.
+        print(
+            f"\n  RESULT: PARTIAL — verified {', '.join(checked)}; "
+            f"NOT CHECKED: {', '.join(skipped)}\n"
+        )
+    else:
+        print(f"\n  RESULT: VERIFIED — {', '.join(checked)}\n")
 
 
 if __name__ == "__main__":
