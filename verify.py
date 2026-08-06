@@ -57,14 +57,34 @@ def key_bytes(s: str) -> bytes:
 # liboqs parameter set names for the algorithms the envelope declares. Keyed on
 # the declared algorithm rather than hardcoded, so a profile change cannot leave
 # the verifier checking against a parameter set that is no longer deployed.
+# Two naming eras. liboqs used "SPHINCS+-SHA2-128f-simple" before SLH-DSA was
+# standardised and "SLH_DSA_PURE_SHA2_128F" after, so a verifier hardcoding
+# either one silently degrades to SKIP against the other. Both are listed and
+# the first one this build actually enables is used.
 OQS_NAMES = {
-    "ML-DSA-44": "ML-DSA-44",
-    "ML-DSA-65": "ML-DSA-65",
-    "ML-DSA-87": "ML-DSA-87",
-    "SLH-DSA-SHA2-128F": "SPHINCS+-SHA2-128f-simple",
-    "SLH-DSA-SHA2-128S": "SPHINCS+-SHA2-128s-simple",
-    "SLH-DSA-SHA2-256S": "SPHINCS+-SHA2-256s-simple",
+    "ML-DSA-44": ["ML-DSA-44"],
+    "ML-DSA-65": ["ML-DSA-65"],
+    "ML-DSA-87": ["ML-DSA-87"],
+    "SLH-DSA-SHA2-128F": ["SLH_DSA_PURE_SHA2_128F", "SPHINCS+-SHA2-128f-simple"],
+    "SLH-DSA-SHA2-128S": ["SLH_DSA_PURE_SHA2_128S", "SPHINCS+-SHA2-128s-simple"],
+    "SLH-DSA-SHA2-192F": ["SLH_DSA_PURE_SHA2_192F", "SPHINCS+-SHA2-192f-simple"],
+    "SLH-DSA-SHA2-256F": ["SLH_DSA_PURE_SHA2_256F", "SPHINCS+-SHA2-256f-simple"],
+    "SLH-DSA-SHA2-256S": ["SLH_DSA_PURE_SHA2_256S", "SPHINCS+-SHA2-256s-simple"],
 }
+
+
+def _enabled_name(candidates: list) -> str | None:
+    """The first candidate this liboqs build actually offers."""
+    try:
+        import oqs  # type: ignore
+
+        available = set(oqs.get_enabled_sig_mechanisms())
+    except Exception:
+        return candidates[0] if candidates else None
+    for c in candidates:
+        if c in available:
+            return c
+    return None
 
 
 def b64u(s: str) -> bytes:
@@ -172,7 +192,8 @@ def main() -> int:
             results["checks"][name] = "SKIP: not present in envelope"
             continue
 
-        alg = OQS_NAMES.get(declared.upper())
+        candidates = OQS_NAMES.get(declared.upper())
+        alg = _enabled_name(candidates) if candidates else None
         if alg is None:
             results["skipped"].append(name)
             results["checks"][name] = (
