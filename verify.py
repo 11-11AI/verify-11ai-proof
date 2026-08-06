@@ -28,6 +28,7 @@ Exit code 0 = all required checks passed, 1 = failure.
 import argparse
 import base64
 import json
+import re
 import sys
 
 import requests
