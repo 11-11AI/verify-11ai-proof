@@ -1,6 +1,6 @@
 # verify-11ai-proof
 
-[![verify-live-proof](https://github.com/AtlasQuantumProtocol/verify-11ai-proof/actions/workflows/verify.yml/badge.svg)](https://github.com/AtlasQuantumProtocol/verify-11ai-proof/actions/workflows/verify.yml)
+[![verify-live-proof](https://github.com/11-11AI/verify-11ai-proof/actions/workflows/verify.yml/badge.svg)](https://github.com/11-11AI/verify-11ai-proof/actions/workflows/verify.yml)
 
 **Don't trust the claim. Run the check.**
 
@@ -13,7 +13,7 @@ This repository verifies, on *your* machine, that the [11/11 AI](https://11aiblo
 ## Run it yourself (30 seconds)
 
 ```bash
-git clone https://github.com/AtlasQuantumProtocol/verify-11ai-proof
+git clone https://github.com/11-11AI/verify-11ai-proof
 cd verify-11ai-proof
 pip install -r requirements.txt
 python verify.py
@@ -83,7 +83,7 @@ is reproducible against the running control plane — this repo is the reproduct
 - Live proof viewer: <https://control.11aiblockchain.com/proof>
 - System status: <https://control.11aiblockchain.com/health>
 - Research corpus (54+ DOIs): <https://zenodo.org/communities/11-11-ai/records>
-- Doctrine: <https://github.com/AtlasQuantumProtocol/execution-governance-doctrine>
+- Doctrine: <https://github.com/11-11AI/execution-governance-doctrine>
 
 ## License
 
