@@ -13,7 +13,7 @@ What is verified:
   3. Envelope key id (kid) matches the JWKS key.
   4. Structural checks: decision, proof_id, execution_id, EA-11 component
      hashes present.
-  5. Best-effort: ML-DSA-65 and SLH-DSA (SPHINCS+) signatures if the `oqs`
+  5. Best-effort: ML-DSA-87 and SLH-DSA (SPHINCS+) signatures if the `oqs`
      (liboqs) bindings are installed. Skipped otherwise — Ed25519 remains
      the classical trust anchor.
 
@@ -24,6 +24,13 @@ Usage:
 
 Exit code 0 = all required checks passed, 1 = failure.
 """
+
+# Keeps `str | None` style annotations from being evaluated at import time, so
+# this runs on Python 3.9 (what macOS ships) and not only on 3.10+. Without it
+# the module raised TypeError on import before doing any work, which is the
+# worst possible failure for a tool whose entire purpose is that a stranger can
+# run it on the machine they already have.
+from __future__ import annotations
 
 import argparse
 import base64

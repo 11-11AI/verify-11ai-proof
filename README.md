@@ -19,6 +19,9 @@ pip install -r requirements.txt
 python verify.py
 ```
 
+Python 3.9 or newer, which includes the `python3` already on macOS. Tested on
+3.9 and 3.13. If your `python` is Python 2, use `python3` for both commands.
+
 Expected output:
 
 ```
