@@ -85,12 +85,12 @@ is reproducible against the running control plane — this repo is the reproduct
 
 - Live proof viewer: <https://control.11aiblockchain.com/proof>
 - System status: <https://control.11aiblockchain.com/health>
-- Research corpus (54+ DOIs): <https://zenodo.org/communities/11-11-ai/records>
+- Research corpus: <https://zenodo.org/communities/11-11-ai/records>
 - Doctrine: <https://github.com/11-11AI/execution-governance-doctrine>
 
 ## License
 
 MIT (verification tooling only). The 11/11 AI control plane, EA-11 evidence
 architecture, and related systems are protected by patent-pending intellectual
-property (USPTO Customer No. 229939). Execution Governance™, EA-11™,
+property. Execution Governance™, EA-11™,
 Execution Evidence State™.
