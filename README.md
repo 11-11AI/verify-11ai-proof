@@ -15,12 +15,47 @@ This repository verifies, on *your* machine, that the [11/11 AI](https://11aiblo
 ```bash
 git clone https://github.com/11-11AI/verify-11ai-proof
 cd verify-11ai-proof
-pip install -r requirements.txt
-python verify.py
+python3 verify.py
 ```
 
+**No `pip install`.** Nothing to install, no virtual environment, no `sudo`.
 Python 3.9 or newer, which includes the `python3` already on macOS. Tested on
-3.9 and 3.13. If your `python` is Python 2, use `python3` for both commands.
+3.9, 3.12 and 3.13, on macOS, Linux and Windows.
+
+That is deliberate. An earlier version required `cryptography` and `requests`,
+and a reviewer on Homebrew Python could not get past the first command, because
+PEP 668 refuses system-wide installs. HTTP now uses the standard library, and
+Ed25519 verification falls back to the RFC 8032 reference implementation
+bundled in `verify.py`. The output always names which implementation checked
+the signature.
+
+If you would rather the signature were checked by a library you already trust,
+install `cryptography` and it will be preferred automatically:
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python3 verify.py
+```
+
+The bundled implementation is cross-checked against `cryptography` over 1500
+cases and the RFC 8032 section 7.1 test vectors. Run that yourself:
+
+```bash
+python3 tests/test_ed25519_reference.py
+```
+
+Two flags matter if you are running this in CI rather than reading it:
+
+```bash
+python3 verify.py --strict --max-age-days 7
+```
+
+`--strict` exits non-zero when any check was **skipped**, not only when one
+failed, so a green build means the full proof was checked rather than the
+subset your machine could reach. `--max-age-days` fails when the served record
+is older than the limit, because a valid signature over a historical record is
+not evidence that the system is deciding anything today.
 
 Expected output:
 
@@ -39,10 +74,16 @@ Expected output:
 To check all three, install the post-quantum bindings and re-run:
 
 ```bash
+python3 -m venv .venv && source .venv/bin/activate
 pip install liboqs-python
-python verify.py
-#   RESULT: VERIFIED — Ed25519, ML-DSA-87, SLH-DSA-SHA2-128f
+python3 verify.py
+#   RESULT: VERIFIED: Ed25519, ML-DSA-87, SLH-DSA-SHA2-128f
 ```
+
+The virtual environment is needed here because `liboqs-python` builds native
+code and most current Python installations refuse system-wide installs. This is
+the only part of the tool that asks you to install anything, and skipping it
+costs you the two post-quantum checks, not the whole verification.
 
 ## What is actually verified
 
@@ -68,14 +109,24 @@ Stated plainly, because a verification tool that overstates its coverage is wors
 
 - **The post-quantum signatures, unless you install liboqs-python.** By default they are
   skipped and the result is `PARTIAL`.
-- **The post-quantum public keys are not anchored.** They arrive inside the same document
-  as the signatures they verify, so they establish internal consistency, not authenticity.
-  Only the Ed25519 key is published out of band, in JWKS.
-- **The evidence root is not independently derivable.** The rule for deriving
-  `ea11_evidence_root` from the published component hashes is not documented, so this
-  script cannot confirm the signed root commits to the published decision.
-- **Freshness.** The record served may be older than the most recent decision. See
-  `selection.record_age_days`.
+- **The identity of the signer.** JWKS is served from the same origin as the evidence,
+  so whoever controls that origin controls both the record and the key that validates
+  it. This script proves the record is internally consistent and signed by the key that
+  domain publishes. It does not prove that key belongs to 11/11 AI. Pin the key
+  fingerprint from a channel that is not `control.11aiblockchain.com` if that matters
+  to you, and it should.
+- **Independent freshness.** Age is computed from the record's own timestamp, which is
+  asserted by the same server that signed the record. `--max-age-days` detects a stale
+  endpoint, not a lying one. The RFC 3161 timestamp token is the third-party anchor and
+  this script does not check it.
+- **Records minted before 5 September 2026.** Seven of them do not carry
+  `ea11_state_hash`, so their evidence root cannot be recomputed by anyone, including
+  11/11 AI. The script reports this as a skip and never as a pass.
+
+Three items previously listed here were fixed on 8 September 2026 after an independent
+review: the component hashes and Merkle root are now recomputed rather than displayed,
+the evidence root is derived from published content, and post-quantum public keys are
+checked against `/v1/public/keys` instead of the copy embedded in the record.
 
 ## Why this exists
 

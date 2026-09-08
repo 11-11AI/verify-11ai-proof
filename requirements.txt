@@ -1,2 +1,16 @@
+# Nothing here is required. `python3 verify.py` runs on a clean machine with no
+# installs at all: HTTP uses urllib from the standard library, and Ed25519
+# verification falls back to the RFC 8032 reference implementation bundled in
+# verify.py and cross-checked in tests/test_ed25519_reference.py.
+#
+# Install these if you would rather the signature were checked by a library you
+# already trust. Both are preferred automatically when present.
+
 cryptography>=42.0
 requests>=2.31
+
+# Optional, and not listed above because it builds native code: liboqs-python
+# adds local verification of the ML-DSA-87 and SLH-DSA signatures. Without it
+# those two are reported as NOT CHECKED, never as passed.
+#   python3 -m venv .venv && source .venv/bin/activate
+#   pip install liboqs-python
