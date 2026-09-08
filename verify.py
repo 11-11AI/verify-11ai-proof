@@ -6,23 +6,43 @@ record from the live control plane, then verifies the signature locally.
 No API key. No trust in the server's own "VALID" labels -- the check is done
 on your machine.
 
-What is verified:
-  1. JWKS key fetched from /.well-known/jwks.json (the trust anchor).
-  2. The hybrid signature envelope's Ed25519 signature over the
-     EA-11 evidence root (ASCII hex string of `ea11_evidence_root`).
-  3. Envelope key id (kid) matches the JWKS key.
-  4. Structural checks: decision, proof_id, execution_id, EA-11 component
-     hashes present.
-  5. Best-effort: ML-DSA-87 and SLH-DSA (SPHINCS+) signatures if the `oqs`
-     (liboqs) bindings are installed. Skipped otherwise -- Ed25519 remains
-     the classical trust anchor.
+What is verified, on your machine:
+  1. JWKS key fetched from /.well-known/jwks.json.
+  2. The five EA-11 component hashes are RECOMPUTED as SHA-512 over the
+     published decision, artifact, execution, audit and lineage states.
+  3. The Merkle root is recomputed from those five leaves.
+  4. The evidence root is recomputed from the published state hash, Merkle
+     root and component hashes, so the signature checked in step 5 is a
+     signature over a value this script reconstructed rather than one it
+     was handed.
+  5. The Ed25519 signature over that evidence root, with the envelope key id
+     matched against JWKS.
+  6. Record age, computed from the record's own timestamp. --max-age-days
+     turns it into a failure.
+  7. ML-DSA-87 and SLH-DSA, only if liboqs bindings are installed AND the
+     public key in the record also appears at /v1/public/keys. A key that
+     appears only inside the record it is verifying is refused.
+
+What is NOT verified, stated because a verifier that overstates its coverage
+is worse than none:
+  - Who the signer is. JWKS is served from the same origin as the evidence,
+    so this proves the record is signed by the key that domain publishes,
+    not that the key belongs to 11/11 AI.
+  - Freshness independently. The timestamp is inside the signed evidence and
+    cannot be edited without breaking the chain, but it is still the issuer's
+    own clock. The RFC 3161 token is the third-party anchor and is not
+    checked here.
+  - Records minted before 5 September 2026, which carry no ea11_state_hash
+    and whose evidence root nobody can recompute, including the issuer.
+    Reported as a skip, never as a pass.
 
 Usage:
-  pip install cryptography requests
-  python verify.py            # human-readable output
-  python verify.py --json     # machine-readable, for CI
+  python3 verify.py                          # nothing to install
+  python3 verify.py --json                   # machine-readable
+  python3 verify.py --strict --max-age-days 7   # what you want in CI
 
-Exit code 0 = all required checks passed, 1 = failure.
+Exit codes: 0 = every required check passed. 1 = a check failed.
+2 = --strict was given and something was not checked.
 """
 
 # Keeps `str | None` style annotations from being evaluated at import time, so
